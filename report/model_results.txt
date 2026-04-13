@@ -2,38 +2,48 @@
 MODEL COMPARISON RESULTS (GridSearchCV)
 ================================================================================
 
+----------------------------------------
 Model: XGBoost
 ----------------------------------------
-Best CV Score: 0.72225
+CV Weighted F1: 0.7222, std: 0.0011
+
 Best Parameters:
   model__learning_rate: 0.1
   model__max_depth: 7
   model__n_estimators: 300
 
+----------------------------------------
 Model: Random Forest
 ----------------------------------------
-Best CV Score: 0.70544
+CV Weighted F1: 0.7054, std: 0.0015
+
 Best Parameters:
   model__max_depth: None
   model__n_estimators: 200
 
+----------------------------------------
 Model: Neural Network
 ----------------------------------------
-Best CV Score: 0.66237
+CV Weighted F1: 0.6624, std: 0.0030
+
 Best Parameters:
   model__alpha: 0.0001
   model__hidden_layer_sizes: (50, 50)
   model__learning_rate_init: 0.001
 
+----------------------------------------
 Model: KNN
 ----------------------------------------
-Best CV Score: 0.63805
+CV Weighted F1: 0.6381, std: 0.0008
+
 Best Parameters:
   model__n_neighbors: 7
 
+----------------------------------------
 Model: Logistic Regression
 ----------------------------------------
-Best CV Score: 0.53987
+CV Weighted F1: 0.5399, std: 0.0016
+
 Best Parameters:
   model__C: 10
 

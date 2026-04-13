@@ -146,7 +146,8 @@ def model_comp(X_train, y_train, models):
         results[name] = {
             'best_model': grid.best_estimator_,
             'best_params': grid.best_params_,
-            'best_score': grid.best_score_
+            'best_score': grid.best_score_,
+            'cv_results': grid.cv_results_
         }
     
     return results
@@ -154,24 +155,40 @@ def model_comp(X_train, y_train, models):
 
 # step 5: save detailed results and return best model for test evaluation
 def save_detailed_results(results, out='report/model_results.txt'):
+    summary = {}
+
+    for name, info in results.items():
+        cv_res = info["cv_results"]
+        best_idx = cv_res["mean_test_score"].argmax()
+
+        summary[name] = {
+            "mean": cv_res["mean_test_score"][best_idx],
+            "std": cv_res["std_test_score"][best_idx],
+            "best_params": info["best_params"],
+            "best_model": info["best_model"]
+        }
+
+    # ---- sort using cached values ----
+    sorted_models = sorted(
+        summary.items(),
+        key=lambda x: x[1]["mean"],
+        reverse=True
+    )
+
+    # ---- write file ----
     with open(out, 'w') as f:
         f.write("="*80 + "\n")
         f.write("MODEL COMPARISON RESULTS (GridSearchCV)\n")
         f.write("="*80 + "\n\n")
 
-        # sort models by best score
-        sorted_models = sorted(
-            results.items(),
-            key=lambda x: x[1]["best_score"],
-            reverse=True
-        )
-
         for name, info in sorted_models:
+            f.write("-"*40 + "\n")
             f.write(f"Model: {name}\n")
             f.write("-"*40 + "\n")
-            f.write(f"Best CV Score: {info['best_score']:.5f}\n")
-            f.write(f"Best Parameters:\n")
 
+            f.write(f"CV Weighted F1: {info['mean']:.4f}, std: {info['std']:.4f}\n\n")
+
+            f.write("Best Parameters:\n")
             for param, value in info["best_params"].items():
                 f.write(f"  {param}: {value}\n")
 
@@ -181,76 +198,115 @@ def save_detailed_results(results, out='report/model_results.txt'):
 
 # step 6: visualize and evaluate on test data
 def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.png'):
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-
     # (a) model comparison results
     df = pd.DataFrame([
         {
             "Model": name,
-            "CV_F1": info["best_score"]
+            "mean": info["mean"],
+            "std": info["std"]
+
         }
         for name, info in sorted_models
     ])
-    axes[0, 0].barh(df["Model"], df["CV_F1"])
-    axes[0, 0].set_title("Model Comparison (CV F1 Score)")
-    axes[0, 0].set_xlabel("CV F1 Score")
+    fig = plt.figure(figsize=(16, 10))
+    gs = fig.add_gridspec(2, 3)
 
-    # evaluate best model on test data
+    # (A) TABLE spanning top row
+    ax_table = fig.add_subplot(gs[0, :])
+    ax_table.axis("off")
+
+    table_data = [
+        [name, f"{info['mean']:.3f}", f"{info['std']:.3f}"]
+        for name, info in sorted_models
+    ]
+
+    table = ax_table.table(
+        cellText=table_data,
+        colLabels=["Model", "CV F1 (mean)", "CV F1 (std)"],
+        cellLoc="center",
+        loc="center"
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1.2, 1.5)
+
+    ax_table.set_title("Model Comparison (Cross-Validated Performance)", pad=20)
+
+    # Best model
     best_name, best_info = sorted_models[0]
     best_model = best_info["best_model"]
 
     y_pred = best_model.predict(X_test)
 
-    #(b) confusion matrix for best model
+    y_test_bin = label_binarize(y_test, classes=[0, 1, 2])
+    y_score = best_model.predict_proba(X_test)
+
+    # (B) Confusion Matrix
+    ax_cm = fig.add_subplot(gs[1, 0])
+
     cm = confusion_matrix(y_test, y_pred)
     cm_norm = cm / cm.sum(axis=1, keepdims=True)
+    cm_norm = np.nan_to_num(cm_norm)
+
     labels = np.array([
         [f"{cm[i,j]}\n({cm_norm[i,j]:.2f})" for j in range(3)]
         for i in range(3)
     ])
 
-    sns.heatmap(cm, annot=labels, fmt="", cmap="Blues", ax=axes[0, 1],
-                xticklabels=[1, 2, 3], yticklabels=[1, 2, 3])
-    axes[0, 1].set_title(f"Confusion Matrix ({best_name})")
-    axes[0, 1].set_xlabel("Predicted")
-    axes[0, 1].set_ylabel("True")
+    sns.heatmap(
+        cm,
+        annot=labels,
+        fmt="",
+        cmap="Blues",
+        ax=ax_cm,
+        xticklabels=[1, 2, 3],
+        yticklabels=[1, 2, 3]
+    )
+    ax_cm.set_aspect("equal")
+    ax_cm.set_title(f"Confusion Matrix ({best_name})")
+    ax_cm.set_xlabel("Predicted")
+    ax_cm.set_ylabel("True")
 
-    # binarize test labels for ROC curve
-    y_test_bin = label_binarize(y_test, classes=[1, 2, 3])
-    y_score = best_model.predict_proba(X_test)
+    # (C) ROC Curve
+    ax_roc = fig.add_subplot(gs[1, 1])
 
-    # (c) roc
     for i in range(3):
         fpr, tpr, _ = roc_curve(y_test_bin[:, i], y_score[:, i])
         roc_auc = auc(fpr, tpr)
-        axes[1, 0].plot(fpr, tpr, label=f"Class {i+1} (AUC={roc_auc:.2f})")
+        ax_roc.plot(fpr, tpr, label=f"Class {i+1} (AUC={roc_auc:.2f})")
 
-    axes[1, 0].plot([0, 1], [0, 1], "k--")
-    axes[1, 0].set_title(f"ROC Curve ({best_name}, OvR)")
-    axes[1, 0].legend()
-    axes[1,0].grid()
-    axes[1,0].set_xlabel("False Positive Rate")
-    axes[1,0].set_ylabel("True Positive Rate")
+    ax_roc.plot([0, 1], [0, 1], "k--")
+    ax_roc.set_title(f"ROC Curve ({best_name}, OvR)")
+    ax_roc.set_xlabel("False Positive Rate")
+    ax_roc.set_ylabel("True Positive Rate")
+    ax_roc.legend()
+    ax_roc.grid()
 
-    # (d) precision-recall curve
+    # (D) Precision-Recall Curve
+    ax_pr = fig.add_subplot(gs[1, 2])
+
     for i in range(3):
         precision, recall, _ = precision_recall_curve(
             y_test_bin[:, i],
             y_score[:, i]
         )
-        axes[1, 1].plot(recall, precision, label=f"Class {i+1}")
+
+        ax_pr.plot(recall, precision, label=f"Class {i+1}")
+
         pos_rate = np.mean(y_test_bin[:, i])
-        axes[1, 1].axhline(pos_rate, linestyle="--", color='gray', alpha=0.6)
+        ax_pr.axhline(pos_rate, linestyle="--", color="gray", alpha=0.6)
 
-    axes[1, 1].set_title(f"Precision–Recall Curve ({best_name}, OvR)")
-    axes[1, 1].legend()
-    axes[1,1].grid()
-    axes[1,1].set_xlabel("Recall")
-    axes[1,1].set_ylabel("Precision")
+    ax_pr.set_title(f"Precision–Recall Curve ({best_name}, OvR)")
+    ax_pr.set_xlabel("Recall")
+    ax_pr.set_ylabel("Precision")
+    ax_pr.legend()
+    ax_pr.grid()
 
-    
+    # ---------------------------
     plt.tight_layout()
-    plt.savefig(out, dpi=300, bbox_inches='tight')
+    plt.savefig(out, dpi=300, bbox_inches="tight")
+    plt.close()
 
 def run_model_comp(X_path, y_path):
     print("\n" + "="*80)
