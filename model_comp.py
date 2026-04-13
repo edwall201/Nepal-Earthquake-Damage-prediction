@@ -222,7 +222,7 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.p
 
     table = ax_table.table(
         cellText=table_data,
-        colLabels=["Model", "CV F1 (mean)", "CV F1 (std)"],
+        colLabels=["Model", "CV Weighted F1 (mean)", "CV Weighted F1 (std)"],
         cellLoc="center",
         loc="center"
     )
