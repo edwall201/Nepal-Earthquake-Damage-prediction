@@ -44,7 +44,7 @@ def preprocess_data(df):
 
     # drop building_id (identifier) and damage_grade (label) from features
     X = df.drop(['building_id', 'damage_grade'], axis=1)
-    y = df['damage_grade']
+    y = df['damage_grade'] - 1
     building_ids = df['building_id']
     geo_level_1 = df['geo_level_1_id'].copy()
 
@@ -85,6 +85,7 @@ def get_models():
     from sklearn.linear_model import LogisticRegression
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.neural_network import MLPClassifier
+    from xgboost import XGBClassifier
 
     models = {
 
@@ -95,8 +96,11 @@ def get_models():
         "Random Forest": (RandomForestClassifier(random_state=RANDOM_SEED), 
                           {"model__n_estimators": [100, 200], "model__max_depth": [None, 10, 20]}),
 
+         "XGBoost": (XGBClassifier(objective="multi:softprob",num_class=3, eval_metric="mlogloss",random_state=RANDOM_SEED),
+                     {"model__n_estimators": [100, 200, 300], "model__max_depth": [3, 5, 7], "model__learning_rate": [0.01, 0.1]}),
+
         "Neural Network": (MLPClassifier(max_iter=1000, random_state=RANDOM_SEED), 
-                           {"model__hidden_layer_sizes": [(50,), (100,), (50, 50)], 
+                           {"model__hidden_layer_sizes": [(25,25), (50, 50)], 
                             "model__alpha": [0.0001, 0.001], "model__learning_rate_init": [0.001, 0.01]})
     }
     return models
@@ -222,7 +226,7 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.p
         axes[1, 0].plot(fpr, tpr, label=f"Class {i+1} (AUC={roc_auc:.2f})")
 
     axes[1, 0].plot([0, 1], [0, 1], "k--")
-    axes[1, 0].set_title("ROC Curve (Random Forest, OvR)")
+    axes[1, 0].set_title(f"ROC Curve ({best_name}, OvR)")
     axes[1, 0].legend()
     axes[1,0].grid()
     axes[1,0].set_xlabel("False Positive Rate")
@@ -238,7 +242,7 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.p
         pos_rate = np.mean(y_test_bin[:, i])
         axes[1, 1].axhline(pos_rate, linestyle="--", color='gray', alpha=0.6)
 
-    axes[1, 1].set_title("Precision–Recall Curve (Random Forest, OvR)")
+    axes[1, 1].set_title(f"Precision–Recall Curve ({best_name}, OvR)")
     axes[1, 1].legend()
     axes[1,1].grid()
     axes[1,1].set_xlabel("Recall")
@@ -263,25 +267,21 @@ def run_model_comp(X_path, y_path):
     models = get_models()
 
     # step 4: train models and compare results
-    # results = model_comp(X_train, y_train, models)
+    results = model_comp(X_train, y_train, models)
     
     # # save results for reload and analysis later
     # with open('report/model_comparison_results.pkl', 'wb') as f:
     #     pickle.dump(results, f)
 
-    # reloading results from pickle file for analysis
-    with open('report/model_comparison_results.pkl', 'rb') as f:
-        results = pickle.load(f)
+    # # reloading results from pickle file for analysis
+    # with open('report/model_comparison_results.pkl', 'rb') as f:
+    #     results = pickle.load(f)
 
     # step 5: save detailed results and return best model for test evaluation
     sorted_models = save_detailed_results(results)
 
     # step 6: visualize and evaluate on test data
-    # evaluate_model(sorted_models, X_test, y_test)
-
-    
-
-
+    evaluate_model(sorted_models, X_test, y_test)
 
 
     print('pause...')

@@ -2,6 +2,14 @@
 MODEL COMPARISON RESULTS (GridSearchCV)
 ================================================================================
 
+Model: XGBoost
+----------------------------------------
+Best CV Score: 0.72225
+Best Parameters:
+  model__learning_rate: 0.1
+  model__max_depth: 7
+  model__n_estimators: 300
+
 Model: Random Forest
 ----------------------------------------
 Best CV Score: 0.70544
