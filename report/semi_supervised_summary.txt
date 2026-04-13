@@ -3,8 +3,8 @@ SEMI-SUPERVISED LEARNING ROBUSTNESS CHECK - SUMMARY REPORT
 
 Dataset: Nepal Earthquake Building Damage
 Total samples: 260601
-Labeled samples: 78180
-Unlabeled samples: 182421
+Labeled samples: 130300
+Unlabeled samples: 130301
 
 MODEL CONFIGURATION:
   Algorithm: K-Nearest Neighbors (KNN)
@@ -13,15 +13,15 @@ MODEL CONFIGURATION:
   Weighting: Distance-based
 
 OVERALL PERFORMANCE:
-  Adjusted Rand Index (ARI): 0.1392
-  Normalized Mutual Information (NMI): 0.1272
-  Accuracy: 0.6409
+  Adjusted Rand Index (ARI): 0.1569
+  Normalized Mutual Information (NMI): 0.1411
+  Accuracy: 0.6526
 
 GEOGRAPHIC ANALYSIS:
   Number of regions: 31
-  Mean ARI across regions: 0.0709
-  Mean NMI across regions: 0.0534
-  Mean Accuracy across regions: 0.6454
+  Mean ARI across regions: 0.0850
+  Mean NMI across regions: 0.0599
+  Mean Accuracy across regions: 0.6564
 
 INTERPRETATION:
   - ARI measures clustering similarity (range: -1 to 1, higher is better)

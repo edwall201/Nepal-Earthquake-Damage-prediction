@@ -83,7 +83,7 @@ def preprocess_data(df):
 # ============================================================================
 # STEP 3: SPLIT INTO LABELED AND UNLABELED
 # ============================================================================
-def split_labeled_unlabeled(X_scaled_df, y, geo_level_1, labeled_percentage=0.3):
+def split_labeled_unlabeled(X_scaled_df, y, geo_level_1, labeled_percentage=0.5):
     print("="*80)
     print("STEP 3: SPLITTING INTO LABELED AND UNLABELED")
     print("="*80)
@@ -401,7 +401,7 @@ def save_detailed_results(building_ids, unlabeled_indices, y_true, y_pred, geo_i
 # ============================================================================
 # MAIN EXECUTION FUNCTION
 # ============================================================================
-def run_semi_supervised_analysis(labels_path, values_path, labeled_percentage=0.3,k_values=[3, 5, 7, 9, 11],output_dir='/home/claude'):
+def run_semi_supervised_analysis(labels_path, values_path, labeled_percentage=0.5,k_values=[3, 5, 7, 9, 11],output_dir='/home/claude'):
     print("\n" + "="*80)
     print("SEMI-SUPERVISED LEARNING ROBUSTNESS CHECK - MODULAR VERSION")
     print("="*80 + "\n")
@@ -485,8 +485,8 @@ if __name__ == "__main__":
     results = run_semi_supervised_analysis(
         labels_path='./data/train_labels.csv',
         values_path='./data/train_values.csv',
-        labeled_percentage=0.3,
-        k_values=[3, 5, 7, 9, 11],
+        labeled_percentage=0.5,
+        k_values=[3, 5, 7, 9, 11], #need to wait until model tunning 
         output_dir='./report'
     )
     
