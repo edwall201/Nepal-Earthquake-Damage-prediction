@@ -196,42 +196,44 @@ def save_detailed_results(results, out='report/model_results.txt'):
 
     return sorted_models
 
-# step 6: visualize and evaluate on test data
-def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.png'):
-    # (a) model comparison results
-    df = pd.DataFrame([
-        {
-            "Model": name,
-            "mean": info["mean"],
-            "std": info["std"]
 
-        }
-        for name, info in sorted_models
-    ])
-    fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(2, 3)
+def plot_model_comps(sorted_models, out='report/model_comparison.png'):
+    fig, ax = plt.subplots(figsize=(10, 2)) # was 16, 10
 
-    # (A) TABLE spanning top row
-    ax_table = fig.add_subplot(gs[0, :])
-    ax_table.axis("off")
+    ax.axis("off")
 
     table_data = [
-        [name, f"{info['mean']:.3f}", f"{info['std']:.3f}"]
+        [name, f"{info['mean']:.3f}", f"{info['std']:.4f}"]
         for name, info in sorted_models
     ]
 
-    table = ax_table.table(
+    table = ax.table(
         cellText=table_data,
         colLabels=["Model", "CV Weighted F1 (mean)", "CV Weighted F1 (std)"],
         cellLoc="center",
         loc="center"
     )
+    # Bold XGBoost row
+    for (row, col), cell in table.get_celld().items():
+        if row > 0:  # skip header row
+            if table_data[row-1][0] == "XGBoost":
+                cell.set_text_props(weight="bold")
 
     table.auto_set_font_size(False)
     table.set_fontsize(11)
     table.scale(1.2, 1.5)
 
-    ax_table.set_title("Model Comparison (Cross-Validated Performance)", pad=20)
+    ax.set_title("Model Comparison (Cross-Validated Performance)", pad=0)
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+# step 6: visualize and evaluate on test data
+def evaluate_model(sorted_models, X_test, y_test, out='report/model_analysis.png'):
+    fig = plt.figure(figsize=(12, 4)) # was 16, 10
+    gs = fig.add_gridspec(1, 3)
 
     # Best model
     best_name, best_info = sorted_models[0]
@@ -242,12 +244,10 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.p
     y_test_bin = label_binarize(y_test, classes=[0, 1, 2])
     y_score = best_model.predict_proba(X_test)
 
-    # (B) Confusion Matrix
-    ax_cm = fig.add_subplot(gs[1, 0])
+    ax_cm = fig.add_subplot(gs[0, 0])
 
     cm = confusion_matrix(y_test, y_pred)
     cm_norm = cm / cm.sum(axis=1, keepdims=True)
-    cm_norm = np.nan_to_num(cm_norm)
 
     labels = np.array([
         [f"{cm[i,j]}\n({cm_norm[i,j]:.2f})" for j in range(3)]
@@ -268,13 +268,12 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.p
     ax_cm.set_xlabel("Predicted")
     ax_cm.set_ylabel("True")
 
-    # (C) ROC Curve
-    ax_roc = fig.add_subplot(gs[1, 1])
+    ax_roc = fig.add_subplot(gs[0, 1])
 
     for i in range(3):
         fpr, tpr, _ = roc_curve(y_test_bin[:, i], y_score[:, i])
-        roc_auc = auc(fpr, tpr)
-        ax_roc.plot(fpr, tpr, label=f"Class {i+1} (AUC={roc_auc:.2f})")
+        auc = auc(fpr, tpr)
+        ax_roc.plot(fpr, tpr, label=f"Class {i+1} (AUC={auc:.2f})")
 
     ax_roc.plot([0, 1], [0, 1], "k--")
     ax_roc.set_title(f"ROC Curve ({best_name}, OvR)")
@@ -283,8 +282,7 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.p
     ax_roc.legend()
     ax_roc.grid()
 
-    # (D) Precision-Recall Curve
-    ax_pr = fig.add_subplot(gs[1, 2])
+    ax_pr = fig.add_subplot(gs[0, 2])
 
     for i in range(3):
         precision, recall, _ = precision_recall_curve(
@@ -303,10 +301,52 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_comparison.p
     ax_pr.legend()
     ax_pr.grid()
 
-    # ---------------------------
     plt.tight_layout()
     plt.savefig(out, dpi=300, bbox_inches="tight")
     plt.close()
+
+
+def plot_classification_report(sorted_models, X_test, y_test, out='report/best_model_report.png'):
+    best_name, best_info = sorted_models[0]
+    best_model = best_info["best_model"]
+
+    y_pred = best_model.predict(X_test)
+
+    report = classification_report(y_test, y_pred, output_dict=True)
+    df = pd.DataFrame(report).transpose()
+
+    df_classes = df.loc[["0", "1", "2"], ["precision", "recall", "f1-score"]]
+    df_classes.index = ["Class 1", "Class 2", "Class 3"]
+    df_classes = df_classes.round(3)
+
+    weighted_f1 = report["weighted avg"]["f1-score"]
+    accuracy = report["accuracy"]
+
+    fig, ax = plt.subplots(figsize=(8, 2))
+    ax.axis("off")
+
+    table = ax.table(
+        cellText=df_classes.values,
+        rowLabels=df_classes.index,
+        colLabels=df_classes.columns,
+        loc="center",
+        cellLoc="center"
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.5)
+
+    ax.set_title(
+        f"{best_name} Performance\n"
+        f"Weighted F1: {weighted_f1:.3f}   |   Accuracy: {accuracy:.3f}",
+        pad=0
+    )
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=300, bbox_inches="tight")
+    plt.close()
+
 
 def run_model_comp(X_path, y_path):
     print("\n" + "="*80)
