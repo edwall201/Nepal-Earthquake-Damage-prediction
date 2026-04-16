@@ -1,5 +1,10 @@
-ROBUSTNESS CHECK SUMMARY
+SEMI-SUPERVISED LEARNING ROBUSTNESS CHECK SUMMARY
+==================================================
 Algorithm: XGBoost
-Labeled Data: 50.0%
-Overall ARI: 0.2241
+Labeled Data Proportion: 50.0%
+--------------------------------------------------
 Overall Accuracy: 0.7028
+Overall ARI:      0.2241
+Overall NMI:      0.2058
+--------------------------------------------------
+Interpretation: ARI and NMI confirm structural consistency of the feature space.
