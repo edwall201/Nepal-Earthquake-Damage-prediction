@@ -150,6 +150,67 @@ def run_pca_visualization(X_sample, y_sample, output_dir):
     print(f"PCA Projection plot saved to: {output_dir}/pca_projection.png")
 
 # Main execution
+def plot_sensitivity_curve(df, output_dir):
+    plt.figure(figsize=(10, 6))
+    plt.plot(df['Proportion'] * 100, df['Accuracy'], marker='o', label='Accuracy', linewidth=2)
+    plt.plot(df['Proportion'] * 100, df['ARI'], marker='s', label='ARI', linewidth=2)
+    plt.title('Model Sensitivity to Labeled Data Volume', fontsize=16)
+    plt.xlabel('Percentage of Labeled Training Data (%)', fontsize=12)
+    plt.ylabel('Metric Score', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.savefig(f"{output_dir}/learning_curve.png")
+    
+def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
+    df = load_and_prepare_data(labels_path, values_path)
+    X_scaled_df, y, building_ids, geo_level_1 = preprocess_data(df)
+    
+    # Hold out 20% as a consistent test set to evaluate all variations fairly
+    X_train_full, X_test, y_train_full, y_test = train_test_split(
+        X_scaled_df, y, test_size=0.20, stratify=y, random_state=RANDOM_SEED
+    )
+
+    proportions = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+    results = []
+
+    for p in proportions:
+        print(f"Testing labeled proportion: {p*100}%...")
+        # Sample p portion of the training data
+        X_labeled, _, y_labeled, _ = train_test_split(
+            X_train_full, y_train_full, train_size=p, stratify=y_train_full, random_state=RANDOM_SEED
+        )
+        
+        model = XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=RANDOM_SEED)
+        model.fit(X_labeled, y_labeled)
+        y_pred = model.predict(X_test)
+        
+        results.append({
+            'Proportion': p,
+            'Accuracy': accuracy_score(y_test, y_pred),
+            'ARI': adjusted_rand_score(y_test, y_pred),
+            'NMI': normalized_mutual_info_score(y_test, y_pred)
+        })
+
+    results_df = pd.DataFrame(results)
+    plot_sensitivity_curve(results_df, output_dir)
+    results_df = pd.DataFrame(results)
+    
+    # Calculate Marginal Gain (Difference between current and previous accuracy)
+    results_df['Gain'] = results_df['Accuracy'].diff().fillna(0)
+    
+    # Identify the "Best" based on different criteria
+    absolute_best = results_df.loc[results_df['Accuracy'].idxmax()]
+    
+    # Identify the Elbow Point (where gain drops below a certain threshold, e.g., 1%)
+    # This is often the most "robust" model for sparse data scenarios
+    threshold = 0.01 
+    elbow_point = results_df[results_df['Gain'] >= threshold].iloc[-1] if any(results_df['Gain'] >= threshold) else results_df.iloc[0]
+
+    print(f"Absolute Highest Accuracy: {absolute_best['Accuracy']:.4f} (at {absolute_best['Proportion']*100:.0f}% labels)")
+    print(f"Optimal Efficiency Point:  {elbow_point['Accuracy']:.4f} (at {elbow_point['Proportion']*100:.0f}% labels)")
+    print(f"Observation: Beyond {elbow_point['Proportion']*100:.0f}%, marginal accuracy gain is less than {threshold*100:.1f}%.")
+    return results_df
+
 def run_semi_supervised_analysis(labels_path, values_path, labeled_percentage=0.5, output_dir='./report'):
     df = load_and_prepare_data(labels_path, values_path)
     X_scaled_df, y, building_ids, geo_level_1 = preprocess_data(df)
@@ -185,4 +246,5 @@ def run_semi_supervised_analysis(labels_path, values_path, labeled_percentage=0.
     print(f"Execution Complete. Accuracy: {metrics['Accuracy']:.4f}, ARI: {metrics['ARI']:.4f}, NMI: {metrics['NMI']:.4f}")
 
 if __name__ == "__main__":
+    run_sensitivity_analysis(labels_path='data/train_labels.csv', values_path='data/train_values.csv')
     run_semi_supervised_analysis(labels_path='data/train_labels.csv', values_path='data/train_values.csv')
