@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 from xgboost import XGBClassifier
 from sklearn.metrics import (adjusted_rand_score, normalized_mutual_info_score, confusion_matrix, accuracy_score)
 from sklearn.decomposition import PCA
@@ -10,6 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import warnings
+
 warnings.filterwarnings('ignore')
 
 RANDOM_SEED = 42
@@ -117,37 +119,59 @@ def save_detailed_results(metrics, geo_results_df, labeled_percentage, output_di
 
 #SHAP
 def run_shap_analysis(model, X_sample, output_dir):
-    
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_sample)
 
     plt.figure(figsize=(12, 8))
-    shap.summary_plot(shap_values, X_sample, show=False)
+    shap.summary_plot(shap_values, X_sample, plot_type="bar", show=False)
     plt.title("SHAP Feature Importance (Top Predictors)", fontsize=18)
     plt.savefig(f"{output_dir}/shap_summary.png", dpi=300, bbox_inches='tight')
     plt.close()
-    print(f"SHAP Summary plot saved to: {output_dir}/shap_summary.png")
+    print(f"Standard SHAP Summary plot saved to: {output_dir}/shap_summary.png")
 
 #PCA
-def run_pca_visualization(X_sample, y_sample, output_dir):
-    
-    pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X_sample)
+def run_pca_with_shap_selection(model, X_sample, y_sample, output_dir, k=10):
 
+    #Calculate SHAP values
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_sample)
+
+    if isinstance(shap_values, list):
+        # Case: List of arrays [class0, class1, class2], each (samples, features)
+        mean_shap_values = np.mean([np.abs(v).mean(axis=0) for v in shap_values], axis=0)
+    elif len(shap_values.shape) == 3:
+        if shap_values.shape[1] == X_sample.shape[1]:
+            mean_shap_values = np.abs(shap_values).mean(axis=(0, 2))
+        elif shap_values.shape[2] == X_sample.shape[1]:
+            mean_shap_values = np.abs(shap_values).mean(axis=(0, 1))
+        else:
+            mean_shap_values = np.abs(shap_values).mean(axis=0)
+    else:
+        # Standard 2D case
+        mean_shap_values = np.abs(shap_values).mean(axis=0)
+
+    # Identify Top K Features
+    top_k_indices = np.argsort(mean_shap_values)[-k:][::-1]
+    top_k_features = [X_sample.columns[i] for i in top_k_indices]
+    
+    print(f"Targeted Features for PCA: {top_k_features}")
+
+    # Dimension Reduction
+    X_selected = X_sample[top_k_features]
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_selected)
+
+    #Plotting
     plt.figure(figsize=(12, 9))
     scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y_sample, cmap='viridis', alpha=0.6, s=20)
-    
     cbar = plt.colorbar(scatter)
     cbar.set_label('Damage Grade (0: Low, 1: Medium, 2: High)', fontsize=14)
-    
-    plt.title("PCA Projection: Latent Feature Space Stability", fontsize=18)
-    plt.xlabel("Principal Component 1", fontsize=14)
-    plt.ylabel("Principal Component 2", fontsize=14)
+    plt.title(f"PCA Projection (k={k}): Feature Space Stability", fontsize=18)
+    plt.xlabel(f"PC1 ({pca.explained_variance_ratio_[0]:.2%} var)", fontsize=12)
+    plt.ylabel(f"PC2 ({pca.explained_variance_ratio_[1]:.2%} var)", fontsize=12)
     plt.grid(True, alpha=0.3)
-    
-    plt.savefig(f"{output_dir}/pca_projection.png", dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"PCA Projection plot saved to: {output_dir}/pca_projection.png")
+    plt.savefig(f"{output_dir}/pca_projection_k10.png", dpi=300, bbox_inches='tight')
+ 
 
 # Main execution
 def plot_sensitivity_curve(df, output_dir):
@@ -166,9 +190,7 @@ def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
     X_scaled_df, y, building_ids, geo_level_1 = preprocess_data(df)
     
     # Hold out 20% as a consistent test set to evaluate all variations fairly
-    X_train_full, X_test, y_train_full, y_test = train_test_split(
-        X_scaled_df, y, test_size=0.20, stratify=y, random_state=RANDOM_SEED
-    )
+    X_train_full, X_test, y_train_full, y_test = train_test_split(X_scaled_df, y, test_size=0.20, stratify=y, random_state=RANDOM_SEED)
 
     proportions = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
     results = []
@@ -184,12 +206,8 @@ def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
         model.fit(X_labeled, y_labeled)
         y_pred = model.predict(X_test)
         
-        results.append({
-            'Proportion': p,
-            'Accuracy': accuracy_score(y_test, y_pred),
-            'ARI': adjusted_rand_score(y_test, y_pred),
-            'NMI': normalized_mutual_info_score(y_test, y_pred)
-        })
+        results.append({'Proportion': p, 'Accuracy': accuracy_score(y_test, y_pred), 'ARI': adjusted_rand_score(y_test, y_pred),
+            'NMI': normalized_mutual_info_score(y_test, y_pred)})
 
     results_df = pd.DataFrame(results)
     plot_sensitivity_curve(results_df, output_dir)
@@ -198,11 +216,10 @@ def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
     # Calculate Marginal Gain (Difference between current and previous accuracy)
     results_df['Gain'] = results_df['Accuracy'].diff().fillna(0)
     
-    # Identify the "Best" based on different criteria
+    # Identify the best based on different criteria
     absolute_best = results_df.loc[results_df['Accuracy'].idxmax()]
     
-    # Identify the Elbow Point (where gain drops below a certain threshold, e.g., 1%)
-    # This is often the most "robust" model for sparse data scenarios
+    # Identify the Elbow Point
     threshold = 0.01 
     elbow_point = results_df[results_df['Gain'] >= threshold].iloc[-1] if any(results_df['Gain'] >= threshold) else results_df.iloc[0]
 
@@ -214,31 +231,26 @@ def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
 def run_semi_supervised_analysis(labels_path, values_path, labeled_percentage=0.5, output_dir='./report'):
     df = load_and_prepare_data(labels_path, values_path)
     X_scaled_df, y, building_ids, geo_level_1 = preprocess_data(df)
-    
-    X_labeled, X_unlabeled, y_labeled, y_unlabeled_true = train_test_split(
-        X_scaled_df, y, test_size=(1-labeled_percentage), stratify=y, random_state=RANDOM_SEED
-    )
+    X_labeled, X_unlabeled, y_labeled, y_unlabeled_true = train_test_split(X_scaled_df, y, test_size=(1-labeled_percentage), stratify=y, random_state=RANDOM_SEED)
     geo_unlabeled = geo_level_1.loc[X_unlabeled.index]
-    
+
     print(f"Training XGBoost on {labeled_percentage*100}% labeled data...")
     model = XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=RANDOM_SEED)
     model.fit(X_labeled, y_labeled)
     y_pred = model.predict(X_unlabeled)
     
-    metrics = {
-        'ARI': adjusted_rand_score(y_unlabeled_true, y_pred),
-        'NMI': normalized_mutual_info_score(y_unlabeled_true, y_pred),
-        'Accuracy': accuracy_score(y_unlabeled_true, y_pred),
-        'confusion_matrix': confusion_matrix(y_unlabeled_true, y_pred)
-    }
+    metrics = {'ARI': adjusted_rand_score(y_unlabeled_true, y_pred), 'NMI': normalized_mutual_info_score(y_unlabeled_true, y_pred),
+        'Accuracy': accuracy_score(y_unlabeled_true, y_pred), 'confusion_matrix': confusion_matrix(y_unlabeled_true, y_pred)}
     
     geo_results_df = analyze_geographic_subsets(y_unlabeled_true, y_pred, geo_unlabeled)
     
     # Run SHAP Analysis with a sample of 2000 rows
     run_shap_analysis(model, X_unlabeled.iloc[:2000], output_dir)
+
+    # Run PCA with SHAP-based feature selection
     
-    # Run PCA Analysis with a sample of 5000 rows
-    run_pca_visualization(X_unlabeled.iloc[:5000], y_unlabeled_true.iloc[:5000], output_dir)
+    run_pca_with_shap_selection(model=model, X_sample=X_unlabeled.iloc[:5000], 
+        y_sample=y_unlabeled_true.iloc[:5000], output_dir=output_dir, k=10)
     
     create_visualizations(y_unlabeled_true, y_pred, metrics, geo_results_df, f"{output_dir}/semi_supervised_results.png")
     save_detailed_results(metrics, geo_results_df, labeled_percentage, output_dir)
