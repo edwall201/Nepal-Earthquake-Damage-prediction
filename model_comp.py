@@ -547,7 +547,7 @@ def run_model_comp(X_path, y_path):
     best_params = sorted_models[0][1]['best_params']
 
 
-    print('pause...')
+    print('Model comparison complete!')
     
 
 
