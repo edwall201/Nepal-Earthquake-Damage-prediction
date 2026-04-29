@@ -33,11 +33,7 @@ def preprocess_data(df):
     # One-hot encoding to align with the main model methodology
     X_encoded = pd.get_dummies(X, columns=categorical_cols, drop_first=False)
     
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_encoded)
-    X_scaled_df = pd.DataFrame(X_scaled, columns=X_encoded.columns, index=X_encoded.index)
-    
-    return X_scaled_df, y, building_ids, geo_level_1
+    return X_encoded, y, building_ids, geo_level_1
 
 # STEP 7: GEOGRAPHIC ANALYSIS
 def analyze_geographic_subsets(y_true, y_pred, geo_ids):
@@ -187,10 +183,10 @@ def plot_sensitivity_curve(df, output_dir):
     
 def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
     df = load_and_prepare_data(labels_path, values_path)
-    X_scaled_df, y, building_ids, geo_level_1 = preprocess_data(df)
+    X_encoded, y, building_ids, geo_level_1 = preprocess_data(df)
     
     # Hold out 20% as a consistent test set to evaluate all variations fairly
-    X_train_full, X_test, y_train_full, y_test = train_test_split(X_scaled_df, y, test_size=0.20, stratify=y, random_state=RANDOM_SEED)
+    X_train_full, X_test, y_train_full, y_test = train_test_split(X_encoded, y, test_size=0.20, stratify=y, random_state=RANDOM_SEED)
 
     proportions = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
     results = []
@@ -202,9 +198,14 @@ def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
             X_train_full, y_train_full, train_size=p, stratify=y_train_full, random_state=RANDOM_SEED
         )
         
+        # Scale data AFTER splitting to prevent data leakage
+        scaler = StandardScaler()
+        X_labeled_scaled = scaler.fit_transform(X_labeled)
+        X_test_scaled = scaler.transform(X_test)
+        
         model = XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=RANDOM_SEED)
-        model.fit(X_labeled, y_labeled)
-        y_pred = model.predict(X_test)
+        model.fit(X_labeled_scaled, y_labeled)
+        y_pred = model.predict(X_test_scaled)
         
         results.append({'Proportion': p, 'Accuracy': accuracy_score(y_test, y_pred), 'ARI': adjusted_rand_score(y_test, y_pred),
             'NMI': normalized_mutual_info_score(y_test, y_pred)})
@@ -230,9 +231,18 @@ def run_sensitivity_analysis(labels_path, values_path, output_dir='./report'):
 
 def run_semi_supervised_analysis(labels_path, values_path, labeled_percentage=0.5, output_dir='./report'):
     df = load_and_prepare_data(labels_path, values_path)
-    X_scaled_df, y, building_ids, geo_level_1 = preprocess_data(df)
-    X_labeled, X_unlabeled, y_labeled, y_unlabeled_true = train_test_split(X_scaled_df, y, test_size=(1-labeled_percentage), stratify=y, random_state=RANDOM_SEED)
+    X_encoded, y, building_ids, geo_level_1 = preprocess_data(df)
+    X_labeled, X_unlabeled, y_labeled, y_unlabeled_true = train_test_split(X_encoded, y, test_size=(1-labeled_percentage), stratify=y, random_state=RANDOM_SEED)
     geo_unlabeled = geo_level_1.loc[X_unlabeled.index]
+
+    # Scale data AFTER splitting to prevent data leakage
+    scaler = StandardScaler()
+    X_labeled_scaled = scaler.fit_transform(X_labeled)
+    X_unlabeled_scaled = scaler.transform(X_unlabeled)
+    
+    # Convert back to DataFrame to preserve column names for SHAP and PCA
+    X_labeled = pd.DataFrame(X_labeled_scaled, columns=X_encoded.columns, index=X_labeled.index)
+    X_unlabeled = pd.DataFrame(X_unlabeled_scaled, columns=X_encoded.columns, index=X_unlabeled.index)
 
     print(f"Training XGBoost on {labeled_percentage*100}% labeled data...")
     model = XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=RANDOM_SEED)
