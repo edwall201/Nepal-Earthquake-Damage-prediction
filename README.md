@@ -1,3 +1,38 @@
 # Nepal-Earthquake-Damage-prediction
-Predicting earthquake damage in Nepal using machine learning. A supervised learning approach to classify building damage based on construction and location features.
 
+This repository contains machine learning models for predicting earthquake damage to buildings in Nepal. The project uses a mix of supervised learning model comparisons and semi-supervised robustness checks to classify building damage (grades 1-3) based on construction and location features.
+
+## Data Acquisition & Preprocessing
+
+The dataset used for this project is from the **DrivenData competition**: [Richter's Predictor: Modeling Earthquake Damage](https://www.drivendata.org/competitions/57/nepal-earthquake/).
+
+**Note:** The required dataset files (`train_values.csv` and `train_labels.csv`) are already included in the `data/` directory of this repository, so no additional download is necessary.
+
+**Preprocessing details:**
+Data preprocessing is handled internally within both scripts (`model_comp.py` and `semi_supervised_learning.py` via their respective `preprocess_data` functions). It includes:
+
+- Dropping identifier columns (`building_id`).
+- Shifting target labels (`damage_grade`) from 1-3 to 0-2 for algorithm compatibility (e.g., XGBoost).
+- One-hot encoding of all categorical variables.
+- Standard scaling (Z-score normalization) of numerical features.
+
+## How to Run the Code
+
+The project is split into two primary execution scripts:
+
+1. **Supervised Model Comparison (`model_comp.py`)**:
+   Runs a comprehensive `GridSearchCV` over 5 different models (KNN, Logistic Regression, Random Forest, XGBoost, Neural Network) and outputs comparison tables, confusion matrices, and ROC/PR curves to the `report/` directory.
+
+   ```bash
+   python model_comp.py
+   ```
+
+2. Robustness Analysis  
+   2.1 Geograhic Analysis  
+    --TBD--  
+   2.2 **Semi-Supervised Learning & SHAP and PCA(`semi_supervised_learning.py`)**:
+   Evaluates model sensitivity to labeled data volume, performs geographic robustness checks, and runs interpretability analyses using SHAP and PCA.
+   Outputs learning curves, PCA plots, and SHAP summaries to the `report/` directory.
+   ```bash
+   python semi_supervised_learning.py
+   ```
