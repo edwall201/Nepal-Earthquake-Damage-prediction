@@ -9,12 +9,16 @@ The dataset used for this project is from the **DrivenData competition**: [Richt
 **Note:** The required dataset files (`train_values.csv` and `train_labels.csv`) are already included in the `data/` directory of this repository, so no additional download is necessary.
 
 **Preprocessing details:**
-Data preprocessing is handled internally within both scripts (`model_comp.py` and `semi_supervised_learning.py` via their respective `preprocess_data` functions). It includes:
+Data preprocessing is handled internally within both scripts (`model_comp.py` and `semi_supervised_learning.py` via their respective `preprocess_data` functions).      
+It includes:
+Data preprocessing is handled internally within both scripts (`model_comp.py` and `semi_supervised_learning.py`). The initial preprocessing steps (handled by the `preprocess_data` functions) include:
 
 - Dropping identifier columns (`building_id`).
 - Shifting target labels (`damage_grade`) from 1-3 to 0-2 for algorithm compatibility (e.g., XGBoost).
 - One-hot encoding of all categorical variables.
 - Standard scaling (Z-score normalization) of numerical features.
+
+To prevent data leakage, **Standard scaling (Z-score normalization)** of numerical features is strictly applied dynamically *after* the dataset is split into training and testing/unlabeled sets (using a `Pipeline` in `model_comp.py` and explicit post-split scaling in `semi_supervised_learning.py`).
 
 ## How to Run the Code
 
