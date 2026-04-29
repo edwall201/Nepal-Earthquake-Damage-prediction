@@ -5,12 +5,14 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler, label_binarize
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import (adjusted_rand_score, normalized_mutual_info_score,classification_report, confusion_matrix, accuracy_score,
-                             f1_score, roc_curve, auc, precision_recall_curve)
+                             f1_score, roc_curve, auc, precision_recall_curve, cohen_kappa_score)
 import matplotlib.pyplot as plt
 import pickle
 import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore')
+from sklearn.metrics import make_scorer
+from sklearn.base import clone
 
 # Set random seed for reproducibility
 RANDOM_SEED = 42
@@ -72,11 +74,23 @@ def preprocess_data(df):
     X_train, X_test, y_train, y_test = train_test_split(
         X_encoded, y, test_size=0.2, random_state=RANDOM_SEED, stratify=y
     )
+
+    # get class weights for rebalancing the cost function during model comparison
+    classes, counts = np.unique(y, return_counts=True)
+    total = len(y)
+    n_classes = len(classes)
+    weights = {
+        c: total / (n_classes * cnt)
+        for c, cnt in zip(classes, counts)
+    }
+    # normalize weights
+    mean_w = np.mean(list(weights.values()))
+    weights = {k: v / mean_w for k, v in weights.items()}
     
     print("Preprocessing complete.")
     print()
 
-    return X_train, y_train, X_test, y_test, building_ids, geo_level_1
+    return X_train, y_train, X_test, y_test, building_ids, geo_level_1, weights
 
 
 # step 3: define models and param grids for comparison
@@ -106,8 +120,20 @@ def get_models():
     return models
 
 
+def create_cost(weights):
+    def cost_function(y_true, y_pred):
+        total = 0
+
+        for t, p in zip(y_true, y_pred):
+            cost = 1 if t !=p else 0
+            total += weights[int(t)] * cost
+        return -(total / len(y_true))
+
+    return make_scorer(cost_function)
+
+
 # step 4: train models and compare results
-def model_comp(X_train, y_train, models):
+def model_comp(X_train, y_train, models, weights=None):
     '''
     X_train and y_train: training data and labels,
     models: dictionary of models to be tuned, 
@@ -123,6 +149,18 @@ def model_comp(X_train, y_train, models):
     # define split to reuse for all models for fair comparison
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
 
+    if weights is not None:
+        custom_scorer = {
+            "f1": make_scorer(f1_score, average='weighted'),
+            "cost": create_cost(weights),
+            "qwk": make_scorer(cohen_kappa_score, weights="quadratic")
+        }
+    else:
+        custom_scorer = {
+            "f1": make_scorer(f1_score, average='weighted'),
+            "qwk": make_scorer(cohen_kappa_score, weights="quadratic")
+        }
+
     results = {}
 
     for name, (model, param_grid) in models.items():
@@ -137,7 +175,8 @@ def model_comp(X_train, y_train, models):
             pipe,
             param_grid,
             cv=cv, # predefined split for fair comparison
-            scoring="f1_weighted",
+            scoring=custom_scorer, 
+            refit="cost", # custom cost function more heavily penalize misclassification
             n_jobs=-1
         )
 
@@ -146,8 +185,11 @@ def model_comp(X_train, y_train, models):
         results[name] = {
             'best_model': grid.best_estimator_,
             'best_params': grid.best_params_,
-            'best_score': grid.best_score_,
-            'cv_results': grid.cv_results_
+            'best_cost': grid.best_score_,
+            'cv_results': grid.cv_results_,
+            'best_qwk': grid.cv_results_['mean_test_qwk'][grid.best_index_],
+            'best_f1': grid.cv_results_['mean_test_f1'][grid.best_index_],
+            'refit_metric': 'cost'
         }
     
     return results
@@ -158,27 +200,30 @@ def save_detailed_results(results, out='report/model_results.txt'):
     summary = {}
 
     for name, info in results.items():
-        cv_res = info["cv_results"]
-        best_idx = cv_res["mean_test_score"].argmax()
+
+        cv_res = info['cv_results']
+        best_idx = np.argmax(cv_res['mean_test_f1'])
 
         summary[name] = {
-            "mean": cv_res["mean_test_score"][best_idx],
-            "std": cv_res["std_test_score"][best_idx],
+            "cost": info["best_cost"],
+            "qwk": info["best_qwk"],
+            "f1": info["best_f1"],
+            "f1_std": cv_res['std_test_f1'][best_idx],
             "best_params": info["best_params"],
             "best_model": info["best_model"]
         }
 
-    # ---- sort using cached values ----
+    # sort by cost (since that's your refit metric)
     sorted_models = sorted(
         summary.items(),
-        key=lambda x: x[1]["mean"],
+        key=lambda x: x[1]["cost"],
         reverse=True
     )
 
-    # ---- write file ----
     with open(out, 'w') as f:
         f.write("="*80 + "\n")
         f.write("MODEL COMPARISON RESULTS (GridSearchCV)\n")
+        f.write("Refit metric: Weighted Cost\n")
         f.write("="*80 + "\n\n")
 
         for name, info in sorted_models:
@@ -186,7 +231,9 @@ def save_detailed_results(results, out='report/model_results.txt'):
             f.write(f"Model: {name}\n")
             f.write("-"*40 + "\n")
 
-            f.write(f"CV Weighted F1: {info['mean']:.4f}, std: {info['std']:.4f}\n\n")
+            f.write(f"Weighted Cost: {info['cost']:.4f}\n")
+            f.write(f"Weighted F1:    {info['f1']:.4f}\n")
+            f.write(f"Quadratic Kappa:{info['qwk']:.4f}\n\n")
 
             f.write("Best Parameters:\n")
             for param, value in info["best_params"].items():
@@ -197,35 +244,88 @@ def save_detailed_results(results, out='report/model_results.txt'):
     return sorted_models
 
 
+def format_param_grid(param_grid):
+    parts = []
+    for k, v in param_grid.items():
+        name = k.replace("model__", "")
+        parts.append(f"{name}: {v}")
+    return "\n".join(parts)
+
+
+def format_best_params(best_params):
+    parts = []
+    for k, v in best_params.items():
+        name = k.replace("model__", "")
+        parts.append(f"{name}={v}")
+    return "\n".join(parts)
+
+
 def plot_model_comps(sorted_models, out='report/model_comparison.png'):
-    fig, ax = plt.subplots(figsize=(10, 2)) # was 16, 10
+    # for tuning record
+    models = get_models()
+    fig, ax = plt.subplots(figsize=(14, 4))
 
     ax.axis("off")
 
-    table_data = [
-        [name, f"{info['mean']:.3f}", f"{info['std']:.4f}"]
-        for name, info in sorted_models
-    ]
+    table_data = []
+
+    for name, info in sorted_models:
+        param_grid = models[name][1]
+
+        search_space = format_param_grid(param_grid)
+        best_params = format_best_params(info["best_params"])
+
+        # score = f"{info['cost']:.3f}"
+        f1_mean = f"{info['f1']:.3f}"
+        f1_std = f"{info['f1_std']:.4f}"
+        qwk = f"{info['qwk']:.3f}"
+
+        f1 = f"{info['f1']:.3f}±{info['f1_std']:.4f}"
+
+        table_data.append([name, search_space, best_params, f1, qwk])
 
     table = ax.table(
         cellText=table_data,
-        colLabels=["Model", "CV Weighted F1 (mean)", "CV Weighted F1 (std)"],
+        colLabels=[
+            "Model",
+            "Hyperparameters Searched",
+            "Best Parameters",
+            "Weighted F1\n(mean ± std)",
+            # "Cost",
+            "QWK"
+        ],
         cellLoc="center",
         loc="center"
     )
-    # Bold XGBoost row
+
+    col_widths = {
+        0: 0.11,  # Model
+        1: 0.25,  # Hyperparameters Searched
+        2: 0.23,  # Best Parameters
+        # 3: 0.09,  # Cost
+        3: 0.15,  # F1
+        4: 0.09   # QWK
+    }
+
     for (row, col), cell in table.get_celld().items():
-        if row > 0:  # skip header row
-            if table_data[row-1][0] == "XGBoost":
-                cell.set_text_props(weight="bold")
+
+        if row == 0:
+            cell.set_height(0.10)
+        else:
+            cell.set_height(0.12)
+
+        cell.set_text_props(wrap=True)
+        cell.set_width(col_widths[col])
+
+        if row == 1 and col in [0, 3, 4]:
+            cell.set_text_props(weight="bold")
 
     table.auto_set_font_size(False)
-    table.set_fontsize(11)
+    table.set_fontsize(10)
     table.scale(1.2, 1.5)
 
-    ax.set_title("Model Comparison (Cross-Validated Performance)", pad=0)
+    ax.set_title("Model Comparison (Cross-Validated Performance)", y=1.05)
 
-    plt.tight_layout()
     plt.savefig(out, dpi=300, bbox_inches="tight")
     plt.close()
 
@@ -272,8 +372,8 @@ def evaluate_model(sorted_models, X_test, y_test, out='report/model_analysis.png
 
     for i in range(3):
         fpr, tpr, _ = roc_curve(y_test_bin[:, i], y_score[:, i])
-        auc = auc(fpr, tpr)
-        ax_roc.plot(fpr, tpr, label=f"Class {i+1} (AUC={auc:.2f})")
+        auc_best = auc(fpr, tpr)
+        ax_roc.plot(fpr, tpr, label=f"Class {i+1} (AUC={auc_best:.2f})")
 
     ax_roc.plot([0, 1], [0, 1], "k--")
     ax_roc.set_title(f"ROC Curve ({best_name}, OvR)")
@@ -348,6 +448,71 @@ def plot_classification_report(sorted_models, X_test, y_test, out='report/best_m
     plt.close()
 
 
+def binary_tasks(params, X_train, y_train, X_test, y_test):
+    from xgboost import XGBClassifier
+
+    # greater than or equal to 2 vs less than 2
+    y_train_2 = (y_train.values >= 1).astype(int)
+    y_test_2 = (y_test.values >= 1).astype(int)
+    model_2 = XGBClassifier(
+        objective="binary:logistic",
+        n_estimators=params["model__n_estimators"],
+        max_depth=params["model__max_depth"],
+        learning_rate=params["model__learning_rate"],
+        random_state=RANDOM_SEED,
+        eval_metric="logloss"
+    )
+    model_2.fit(X_train, y_train_2)
+    pred2 = model_2.predict(X_test)
+    print("Y >= 2")
+    print(classification_report(y_test_2, pred2))
+
+
+    # 
+    y_train_3 = (y_train.values >= 2).astype(int)
+    y_test_3 = (y_test.values >= 2).astype(int)
+    model_3 = XGBClassifier(
+        objective="binary:logistic",
+        n_estimators=params["model__n_estimators"],
+        max_depth=params["model__max_depth"],
+        learning_rate=params["model__learning_rate"],
+        random_state=RANDOM_SEED,
+        eval_metric="logloss"
+    )
+    model_3.fit(X_train, y_train_3)
+    pred3 = model_3.predict(X_test)
+    print("Y >= 3")
+    print(classification_report(y_test_3, pred3))
+
+    final_out = np.zeros_like(pred2)
+    mask_wrong = np.zeros_like(pred2, dtype=bool)
+
+    count0 = 0
+    count1 = 0
+    count2 = 0
+    count_wrong = 0
+
+    for i, (p2, p3) in enumerate(zip(pred2, pred3)):
+        if p2 == 0 and p3 == 0:
+            count0+=1
+            final_out[i] = 0
+        elif p2 == 0 and p3 == 1:
+            count1+=1
+            final_out[i] = 1
+        elif p2 == 1 and p3 == 1:
+            count2+=1
+            final_out[i] = 2
+        elif p2 == 1 and p3 == 0:
+            count_wrong+=1
+            # print("BAD")
+            final_out[i] = 0
+            mask_wrong[i] = True
+
+        final_accuracy = np.mean((final_out == y_test) & (~mask_wrong))
+
+        
+
+
 def run_model_comp(X_path, y_path):
     print("\n" + "="*80)
     print("MODEL COMPARISON")
@@ -357,20 +522,20 @@ def run_model_comp(X_path, y_path):
     df = load_and_prepare_data(X_path, y_path)
 
     # step 2: preprocess data
-    X_train, y_train, X_test, y_test, building_ids, geo_level_1 = preprocess_data(df)
+    X_train, y_train, X_test, y_test, building_ids, geo_level_1, weights = preprocess_data(df)
 
     # step 3: define models and param grids for comparison
     models = get_models()
 
     # step 4: train models and compare results
-    results = model_comp(X_train, y_train, models)
+    results = model_comp(X_train, y_train, models, weights)
     
     # # save results for reload and analysis later
     # with open('report/model_comparison_results.pkl', 'wb') as f:
     #     pickle.dump(results, f)
 
-    # # reloading results from pickle file for analysis
-    # with open('report/model_comparison_results.pkl', 'rb') as f:
+    # # # reloading results from pickle file for analysis
+    # with open(r'C:\Users\akm87\Documents\github\model_comparison_results.pkl', 'rb') as f:
     #     results = pickle.load(f)
 
     # step 5: save detailed results and return best model for test evaluation
@@ -378,6 +543,8 @@ def run_model_comp(X_path, y_path):
 
     # step 6: visualize and evaluate on test data
     evaluate_model(sorted_models, X_test, y_test)
+
+    best_params = sorted_models[0][1]['best_params']
 
 
     print('pause...')

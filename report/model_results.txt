@@ -1,11 +1,14 @@
 ================================================================================
 MODEL COMPARISON RESULTS (GridSearchCV)
+Refit metric: Weighted Cost
 ================================================================================
 
 ----------------------------------------
 Model: XGBoost
 ----------------------------------------
-CV Weighted F1: 0.7222, std: 0.0011
+Weighted Cost: -0.2151
+Weighted F1:    0.7222
+Quadratic Kappa:0.5816
 
 Best Parameters:
   model__learning_rate: 0.1
@@ -15,16 +18,20 @@ Best Parameters:
 ----------------------------------------
 Model: Random Forest
 ----------------------------------------
-CV Weighted F1: 0.7054, std: 0.0015
+Weighted Cost: -0.2228
+Weighted F1:    0.7045
+Quadratic Kappa:0.5529
 
 Best Parameters:
   model__max_depth: None
-  model__n_estimators: 200
+  model__n_estimators: 100
 
 ----------------------------------------
 Model: Neural Network
 ----------------------------------------
-CV Weighted F1: 0.6624, std: 0.0030
+Weighted Cost: -0.2514
+Weighted F1:    0.6624
+Quadratic Kappa:0.4853
 
 Best Parameters:
   model__alpha: 0.0001
@@ -34,15 +41,19 @@ Best Parameters:
 ----------------------------------------
 Model: KNN
 ----------------------------------------
-CV Weighted F1: 0.6381, std: 0.0008
+Weighted Cost: -0.2549
+Weighted F1:    0.6279
+Quadratic Kappa:0.4317
 
 Best Parameters:
-  model__n_neighbors: 7
+  model__n_neighbors: 3
 
 ----------------------------------------
 Model: Logistic Regression
 ----------------------------------------
-CV Weighted F1: 0.5399, std: 0.0016
+Weighted Cost: -0.3235
+Weighted F1:    0.5399
+Quadratic Kappa:0.2604
 
 Best Parameters:
   model__C: 10
