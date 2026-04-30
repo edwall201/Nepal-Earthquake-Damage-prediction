@@ -47,7 +47,7 @@ The project is split into two primary execution scripts:
    python semi_supervised_learning.py
    ```
 
-   ## 3. Application
+3. Application
 
 #### SHAP Analysis
 
