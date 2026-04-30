@@ -29,39 +29,48 @@ The project is split into two primary execution scripts:
    ```
 
 2. Robustness Analysis  
-   2.1 Geograhic Analysis  
-    --TBD--  
+   2.1 Structural & Geographic Analysis
+
+   - **Structural Robustness (`robustness_structure.py`)**:
+     Performs subgroup analyses on the held-out test set to ensure the model performs reliably across different physical building characteristics. It evaluates weighted F1 and severe damage recall across **Foundation Types** and **Superstructure Material Tiers** (Traditional, Mixed/Transitional, Modern). Outputs `foundation_combined.png` and `material_combined.png`.
+     ```bash
+     python robustness_structure.py
+     ```
+   - **Geographic Robustness**:
+     Analyzes predictive performance (e.g., ARI, NMI, and Accuracy) across various geographic regions (`geo_level_1_id`) to ensure the model generalizes well spatially and isn't overfitted to specific subsets. _(Note: Geographic evaluation is also integrated into the semi-supervised learning pipeline)._
+
    2.2 Semi-Supervised Learning & SHAP and PCA(`semi_supervised_learning.py`):
    Evaluates model sensitivity to labeled data volume, performs geographic robustness checks, and runs interpretability analyses using SHAP and PCA.
    Outputs learning curves, PCA plots, and SHAP summaries to the `report/` directory.
+
    ```bash
    python semi_supervised_learning.py
    ```
 
-
    ## 3. Application
 
-
 #### SHAP Analysis
-- Extracts the best trained model and scaler from the pipeline  
-- Computes SHAP values based on the trained XGBoost model  
-- Separates SHAP values by class and computes global SHAP values by averaging across samples  
-- Constructs transformed versions of geographic variables (geo_level_1_id, geo_level_2_id, geo_level_3_id) by replacing each category with the mean observed damage level within that category (using training data)  
-- Applies the same mapping to the test data and fills unseen categories with the global mean  
-- Uses the transformed variables for interpretation and feature effect analysis  
+
+- Extracts the best trained model and scaler from the pipeline
+- Computes SHAP values based on the trained XGBoost model
+- Separates SHAP values by class and computes global SHAP values by averaging across samples
+- Constructs transformed versions of geographic variables (geo_level_1_id, geo_level_2_id, geo_level_3_id) by replacing each category with the mean observed damage level within that category (using training data)
+- Applies the same mapping to the test data and fills unseen categories with the global mean
+- Uses the transformed variables for interpretation and feature effect analysis
 
 #### GAM
-- Reloads and preprocesses the dataset (merge, drop identifiers, relabel target)  
-- Splits data into training and testing sets with stratification  
-- Constructs binary target variables: Y ≥ 2, Y ≥ 3  
-- Applies one-hot encoding to all features  
-- Identifies feature types: one-hot encoded variables are treated as linear terms; continuous variables are modeled using spline terms  
-- Automatically builds GAM term structure based on feature types  
-- Fits two Logistic GAM models separately for: Y ≥ 2, Y ≥ 3 (the final report uses Y ≥ 2)  
-- Samples a subset of the training data for computational efficiency  
-- Selects top features for visualization (based on global SHAP in the previous section)  
-- Computes partial dependence for selected features  
-- Plots marginal effects of each feature across its value range  
+
+- Reloads and preprocesses the dataset (merge, drop identifiers, relabel target)
+- Splits data into training and testing sets with stratification
+- Constructs binary target variables: Y ≥ 2, Y ≥ 3
+- Applies one-hot encoding to all features
+- Identifies feature types: one-hot encoded variables are treated as linear terms; continuous variables are modeled using spline terms
+- Automatically builds GAM term structure based on feature types
+- Fits two Logistic GAM models separately for: Y ≥ 2, Y ≥ 3 (the final report uses Y ≥ 2)
+- Samples a subset of the training data for computational efficiency
+- Selects top features for visualization (based on global SHAP in the previous section)
+- Computes partial dependence for selected features
+- Plots marginal effects of each feature across its value range
   ```bash
   application.ipynb
   ```
