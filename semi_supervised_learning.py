@@ -161,7 +161,7 @@ def run_pca_with_shap_selection(model, X_sample, y_sample, output_dir, k=10):
     plt.figure(figsize=(12, 9))
     scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y_sample, cmap='viridis', alpha=0.6, s=20)
     cbar = plt.colorbar(scatter)
-    cbar.set_label('Damage Grade (0: Low, 1: Medium, 2: High)', fontsize=14)
+    cbar.set_label('Damage Level (1: Low, 2: Medium, 3: High)', fontsize=14)
     plt.title(f"PCA Projection (k={k}): Feature Space Stability", fontsize=18)
     plt.xlabel(f"PC1 ({pca.explained_variance_ratio_[0]:.2%} var)", fontsize=12)
     plt.ylabel(f"PC2 ({pca.explained_variance_ratio_[1]:.2%} var)", fontsize=12)
