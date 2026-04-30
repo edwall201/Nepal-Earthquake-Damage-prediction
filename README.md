@@ -32,20 +32,34 @@ The project is split into two primary execution scripts:
    2.1 Structural & Geographic Analysis
 
    - **Structural Robustness (`robustness_structure.py`)**:
-     Performs subgroup analyses on the held-out test set to ensure the model performs reliably across different physical building characteristics. It evaluates weighted F1 and severe damage recall across **Foundation Types** and **Superstructure Material Tiers** (Traditional, Mixed/Transitional, Modern). Outputs `foundation_combined.png` and `material_combined.png`.
+     Performs subgroup analyses on the held-out test set to ensure the model performs reliably across different physical building characteristics. It evaluates weighted F1 and severe damage recall across foundation Types and Superstructure Material Tiers (Traditional, Mixed/Transitional, Modern). Outputs `foundation_combined.png` and `material_combined.png`.
      ```bash
      python robustness_structure.py
      ```
-   - **Geographic Robustness**:
-     Analyzes predictive performance (e.g., ARI, NMI, and Accuracy) across various geographic regions (`geo_level_1_id`) to ensure the model generalizes well spatially and isn't overfitted to specific subsets. _(Note: Geographic evaluation is also integrated into the semi-supervised learning pipeline)._
+   - **Geographic Robustness (`robustness_geo.py`)**:
+     Analyzes the spatial generalization of the model through two checks:
 
-   2.2 Semi-Supervised Learning & SHAP and PCA(`semi_supervised_learning.py`):
-   Evaluates model sensitivity to labeled data volume, performs geographic robustness checks, and runs interpretability analyses using SHAP and PCA.
-   Outputs learning curves, PCA plots, and SHAP summaries to the `report/` directory.
+     1. **Geographic Feature**: Systematically removes geographic features (district, sub-district, ward) to quantify their impact on the Weighted F1-score, outputting `geo_ablation_xgb.png`.
+     2. **District-Level Subgroup Analysis**: Evaluates the Weighted F1-score across individual geographic regions (`geo_level_1_id`) on the held-out test set, outputting `geo_level1_subgroup.png`.
 
-   ```bash
-   python semi_supervised_learning.py
-   ```
+     ```bash
+     python robustness_geo.py
+     ```
+
+     2.2 Semi-Supervised Learning, SHAP, & PCA (`semi_supervised_learning.py`)
+     Executes two main pipelines to evaluate learning efficiency and interpretability (all results are saved to the `report/` directory):
+
+      - **Sensitivity Analysis**: Evaluates how model performance (Accuracy, ARI, NMI) scales with the proportion of labeled training data (from 5% to 50%), identifying the optimal "elbow point" of efficiency. Outputs `learning_curve.png`.
+      - **Semi-Supervised & Interpretability Analysis**:
+
+      - Evaluates metrics and geographic robustness (ARI, NMI, Accuracy by region) on the unlabeled set, outputting `semi_supervised_results.png` and `semi_supervised_geo_analysis.csv`.
+      - Extracts global feature importance using **SHAP**, outputting a bar plot to `shap_summary.png`.
+      - Performs dimensionality reduction via **PCA** on the top 10 SHAP-selected features to visualize feature space stability across damage grades, outputting `pca_projection_k10.png`.
+      - Generates a summary text report at `semi_supervised_summary.txt`.
+
+      ```bash
+      python semi_supervised_learning.py
+      ```
 
 3. Application
 
