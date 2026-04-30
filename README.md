@@ -63,5 +63,5 @@ The project is split into two primary execution scripts:
 - Computes partial dependence for selected features  
 - Plots marginal effects of each feature across its value range  
   ```bash
- application.ipynb
+  application.ipynb
   ```
