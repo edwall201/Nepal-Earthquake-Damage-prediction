@@ -37,3 +37,28 @@ The project is split into two primary execution scripts:
    ```bash
    python semi_supervised_learning.py
    ```
+
+3. Application:
+   SHAP Analysis:
+· Extracts the best trained model and scaler from the pipeline
+· Computes SHAP values based on the trained XGBoost model
+· Separates SHAP values by class and computes global SHAP values by averaging across samples
+· Constructs transformed versions of geographic variables (geo_level_1_id, geo_level_2_id, geo_level_3_id) by replacing each category with the mean observed damage level within that category (using training data)
+· Applies the same mapping to the test data and fills unseen categories with the global mean
+· Uses the transformed variables for interpretation and feature effect analysis
+
+  GAM：
+· Reloads and preprocesses the dataset (merge, drop identifiers, relabel target)
+· Splits data into training and testing sets with stratification
+· Constructs binary target variables: Y ≥ 2, Y ≥ 3
+· Applies one-hot encoding to all features
+· Identifies feature types:One-hot encoded variables are treated as linear terms; continuous variables are modeled using spline terms
+· Automatically builds GAM term structure based on feature types
+· Fits two Logistic GAM models separately for: Y ≥ 2, Y ≥ 3. Although the final report only use the Y ≥ 2
+· Samples a subset of the training data for computational efficiency
+· Selects top features for visualization (based on global SHAP in the last section)
+· Computes partial dependence for selected features
+Plots marginal effects of each feature across its value range
+  ```bash
+ application.ipynb
+  ```
