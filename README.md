@@ -28,19 +28,19 @@ The project is split into two primary execution scripts:
    python model_comp.py
    ```
 
-2. Robustness Analysis  
+2. **Robustness Analysis** 
    2.1 Structural & Geographic Analysis
 
-   - **Structural Robustness (`robustness_structure.py`)**:
+   - Structural Robustness (`robustness_structure.py`):
      Performs subgroup analyses on the held-out test set to ensure the model performs reliably across different physical building characteristics. It evaluates weighted F1 and severe damage recall across foundation Types and Superstructure Material Tiers (Traditional, Mixed/Transitional, Modern). Outputs `foundation_combined.png` and `material_combined.png`.
      ```bash
      python robustness_structure.py
      ```
-   - **Geographic Robustness (`robustness_geo.py`)**:
+   - Geographic Robustness (`robustness_geo.py`):
      Analyzes the spatial generalization of the model through two checks:
 
-     1. **Geographic Feature**: Systematically removes geographic features (district, sub-district, ward) to quantify their impact on the Weighted F1-score, outputting `geo_ablation_xgb.png`.
-     2. **District-Level Subgroup Analysis**: Evaluates the Weighted F1-score across individual geographic regions (`geo_level_1_id`) on the held-out test set, outputting `geo_level1_subgroup.png`.
+     1. Geographic Feature: Systematically removes geographic features (district, sub-district, ward) to quantify their impact on the Weighted F1-score, outputting `geo_ablation_xgb.png`.
+     2. District-Level Subgroup Analysis: Evaluates the Weighted F1-score across individual geographic regions (`geo_level_1_id`) on the held-out test set, outputting `geo_level1_subgroup.png`.
 
      ```bash
      python robustness_geo.py
@@ -49,8 +49,8 @@ The project is split into two primary execution scripts:
      2.2 Semi-Supervised Learning, SHAP, & PCA (`semi_supervised_learning.py`)
      Executes two main pipelines to evaluate learning efficiency and interpretability (all results are saved to the `report/` directory):
 
-      - **Sensitivity Analysis**: Evaluates how model performance (Accuracy, ARI, NMI) scales with the proportion of labeled training data (from 5% to 50%), identifying the optimal "elbow point" of efficiency. Outputs `learning_curve.png`.
-      - **Semi-Supervised & Interpretability Analysis**:
+      - Sensitivity Analysis: Evaluates how model performance (Accuracy, ARI, NMI) scales with the proportion of labeled training data (from 5% to 50%), identifying the optimal "elbow point" of efficiency. Outputs `learning_curve.png`.
+      - Semi-Supervised & Interpretability Analysis:
 
       - Evaluates metrics and geographic robustness (ARI, NMI, Accuracy by region) on the unlabeled set, outputting `semi_supervised_results.png` and `semi_supervised_geo_analysis.csv`.
       - Extracts global feature importance using **SHAP**, outputting a bar plot to `shap_summary.png`.
@@ -61,7 +61,7 @@ The project is split into two primary execution scripts:
       python semi_supervised_learning.py
       ```
 
-3. Application
+3. **Application**
 
 #### SHAP Analysis
 
